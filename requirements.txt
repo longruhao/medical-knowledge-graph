@@ -1,0 +1,13 @@
+torch>=2.0.0
+transformers>=4.30.0
+flask>=2.3.0
+requests>=2.31.0
+numpy>=1.24.0,<2.0.0
+scikit-learn>=1.3.0
+pytorch-crf==0.7.2
+locust>=2.15.0
+matplotlib>=3.7.0
+pandas>=2.0.0
+tqdm>=4.65.0
+jieba>=0.42.1
+shutup>=0.2.0

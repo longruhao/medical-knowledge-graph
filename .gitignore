@@ -1,0 +1,96 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+kg_env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# PyTorch Model Files
+*.pth
+*.pt
+*.onnx
+*.pb
+save_model/*.pth
+save_model/*.pt
+saved_models/
+checkpoints/
+checkpoint/
+
+# Large Data Files
+data_origin/
+*/data_origin/*
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# BERT Pre-trained Models
+bert-base-chinese/
+bert_model/
+pretrained_models/
+models/bert*
+
+# Logs
+log.txt
+*.log
+logs/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Environment
+.env
+.venv
+
+# OS
+Thumbs.db
+Desktop.ini
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Locust
+locust_reports/
+
+# API test results
+test_results/
+
+# Keep directory structure but ignore content
+!data_origin/.gitkeep
+!save_model/.gitkeep

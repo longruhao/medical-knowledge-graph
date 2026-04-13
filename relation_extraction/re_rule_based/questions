@@ -1,0 +1,246 @@
+准确率只有 35.72%，确实比较低。让我帮你分析一下可能的原因和改进方法：
+
+
+
+
+**已查看文件** *model.py*
+
+**已查看文件** *train.py*
+
+**已查看文件** *data.json*
+
+
+根据代码和数据分析，关系抽取模型准确率低的主要原因有：
+
+## 主要原因分析
+
+### 1. **数据集规模太小**
+从 `data.json` 可以看到，训练数据只有约 1200 条样本，这对于深度学习模型来说太少了。
+
+### 2. **类别不平衡问题**
+关系类型分布可能不均衡，某些关系的样本很少，导致模型学习不充分。
+
+### 3. **模型架构相对简单**
+- 使用的是 BiLSTM + Attention 架构
+- 没有使用预训练语言模型（如 BERT）
+- 特征提取能力有限
+
+### 4. **超参数可能需要调整**
+- learning_rate、batch_size、dropout 等参数可能不是最优
+
+## 改进方法
+
+### 方法 1: 数据增强（最有效）
+
+```python
+# ... existing code ...
+
+def get_data(data_path):
+    '''
+    将原始数据集格式转换，返回模型需要的数据格式
+    '''
+    # 1 定义存储容器
+    datas = []
+    ents = []
+    pos_e1 = []
+    pos_e2 = []
+    labels = []
+
+    for line in open(data_path, 'r', encoding='utf-8'):
+        line_list = line.strip().split(' ', maxsplit=3)
+        assert len(line_list) == 4
+
+        if line_list[2] not in rel2id:
+            continue
+
+        ent1 = line_list[0]
+        ent2 = line_list[1]
+        ents.append([ent1, ent2])
+
+        idx1 = line_list[3].index(ent1)
+        idx2 = line_list[3].index(ent2)
+
+        sent = []
+        pos1 = []
+        pos2 = []
+
+        for idx, word in enumerate(line_list[3]):
+            sent.append(word)
+            pos1.append(idx - idx1)
+            pos2.append(idx - idx2)
+
+        datas.append(sent)
+        pos_e1.append(pos1)
+        pos_e2.append(pos2)
+        labels.append(rel2id[line_list[2]])
+
+        # 数据增强：对长句子进行随机截断
+        if len(sent) > 30:
+            aug_sent = sent[:30]
+            aug_pos1 = pos1[:30]
+            aug_pos2 = pos2[:30]
+            datas.append(aug_sent)
+            pos_e1.append(aug_pos1)
+            pos_e2.append(aug_pos2)
+            labels.append(rel2id[line_list[2]])
+            ents.append([ent1, ent2])
+
+    return datas, labels, pos_e1, pos_e2, ents
+
+# ... existing code ...
+```
+
+
+### 方法 2: 调整模型超参数
+
+```python
+# ... existing code ...
+class Config():
+    def __init__(self):
+        # 1 定义设备
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+        # 2 数据集路径
+        self.train_data_path = r'D:\workspace\code\learning\knowledge_graph\day04\RE_LSTM_Attention\data\train.txt'
+        self.test_data_path = r'D:\workspace\code\learning\knowledge_graph\day04\RE_LSTM_Attention\data\test.txt'
+        self.rel_data_path = r'D:\workspace\code\learning\knowledge_graph\day04\RE_LSTM_Attention\data\relation2id.txt'
+
+        # 3 模型参数
+        self.embed_dim = 256  # 增加词嵌入维度 (原 128)
+        self.pos_dim = 64  # 增加位置嵌入维度 (原 32)
+        self.hidden_dim = 300  # 增加 LSTM 隐藏层维度 (原 200)
+        self.max_length = 80  # 增加最大句子长度 (原 70)
+
+        # 4 训练参数
+        self.epochs = 100  # 增加训练轮数 (原 60)
+        self.batch_size = 128  # 减小 batch_size (原 256)
+        self.learning_rate = 5e-4  # 降低学习率 (原 1e-3)
+# ... existing code ...
+```
+
+
+### 方法 3: 改进模型架构 - 添加多层 BiLSTM
+
+```python
+# ... existing code ...
+class BiLSTM_Attn(nn.Module):
+    def __init__(self, conf, vocab_size, pos_size, tag_size):
+        super().__init__()
+        # 1 接收参数
+        self.vocab_size = vocab_size
+        self.embed_dim = conf.embed_dim
+        self.pos_dim = conf.pos_dim
+        self.hidden_dim = conf.hidden_dim
+        self.pos_size = pos_size
+        self.tag_size = tag_size
+        self.batch_size = conf.batch_size
+
+        # 2 定义网络层
+        self.word_embed = nn.Embedding(self.vocab_size, self.embed_dim)
+        self.pos1_embed = nn.Embedding(self.pos_size, self.pos_dim)
+        self.pos2_embed = nn.Embedding(self.pos_size, self.pos_dim)
+
+        # 双层 BiLSTM
+        self.lstm = nn.LSTM(input_size=self.embed_dim + self.pos_dim * 2,
+                            hidden_size=self.hidden_dim // 2,
+                            bidirectional=True,
+                            num_layers=2,  # 改为 2 层
+                            batch_first=True)
+
+        self.linear = nn.Linear(self.hidden_dim * 2, self.tag_size)  # 因为双向 +2 层
+        self.dropout_embed = nn.Dropout(p=0.3)  # 增加 dropout
+        self.dropout_lstm = nn.Dropout(p=0.3)
+        self.dropout_attn = nn.Dropout(p=0.3)
+        self.attn = nn.Parameter(torch.randn(self.batch_size, 1, self.hidden_dim * 2))
+
+    # ... existing code ...
+```
+
+
+### 方法 4: 使用 Focal Loss 解决类别不平衡
+
+```python
+# ... existing code ...
+
+class FocalLoss(nn.Module):
+    def __init__(self, gamma=2.0, alpha=None):
+        super(FocalLoss, self).__init__()
+        self.gamma = gamma
+        self.alpha = alpha
+
+    def forward(self, input, target):
+        ce_loss = nn.CrossEntropyLoss(reduction='none')(input, target)
+        pt = torch.exp(-ce_loss)
+        focal_loss = ((1 - pt) ** self.gamma) * ce_loss
+        if self.alpha is not None:
+            focal_loss *= self.alpha.gather(0, target)
+        return focal_loss.mean()
+
+def train(conf, vocab_size, pos_size, tag_size):
+    # 1 准备物料
+    train_loader, test_loader = get_loader()
+    model = BiLSTM_Attn(conf, vocab_size, pos_size, tag_size).to(conf.device)
+    optimizer = optim.Adam(model.parameters(), lr=conf.learning_rate, weight_decay=1e-5)  # 添加权重衰减
+    loss_fn = FocalLoss(gamma=2.0)  # 使用 Focal Loss
+
+    # ... existing code ...
+```
+
+
+### 方法 5: 添加早停机制和学习率调度
+
+```python
+# ... existing code ...
+
+def train(conf, vocab_size, pos_size, tag_size):
+    # 1 准备物料
+    train_loader, test_loader = get_loader()
+    model = BiLSTM_Attn(conf, vocab_size, pos_size, tag_size).to(conf.device)
+    optimizer = optim.Adam(model.parameters(), lr=conf.learning_rate)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=5)  # 学习率调度
+    loss_fn = nn.CrossEntropyLoss()
+
+    # 2 初始化几个参数
+    start_time = time.time()
+    total_loss = 0
+    total_acc = 0
+    total_step = 0
+    total_sample = 0
+    f1_init = -1000
+    no_improve_count = 0  # 早停计数
+    max_no_improve = 10  # 最多容忍 10 轮不提升
+
+    # 3 开启训练
+    for epoch in range(conf.epochs):
+        model.train()
+        for idx, (sent, pos1, pos2, label, _, _, _) in enumerate(tqdm(train_loader, desc="Model Training")):
+            # ... existing code ...
+
+        # 3.4 根据模型测试结果 保存模型
+        precision, recall, f1, report, loss = model2test(test_loader, model, loss_fn)
+        scheduler.step(f1)  # 根据 f1 调整学习率
+
+        if f1 > f1_init:
+            f1_init = f1
+            no_improve_count = 0
+            torch.save(model.state_dict(), '/Users/cale/Work/CZ/知识图谱/code/RE_LSTM_Attention/save/best.pth')
+            print('Test Loss:%.4f\t' % loss)
+            print(report)
+        else:
+            no_improve_count += 1
+            if no_improve_count >= max_no_improve:
+                print(f'连续{max_no_improve}轮 F1 未提升，提前停止训练')
+                break
+
+    # ... existing code ...
+```
+
+
+## 建议的改进优先级
+
+1. **立即可做**: 调整超参数（方法 2）+ 添加早停机制（方法 5）
+2. **短期改进**: 数据增强（方法 1）+ Focal Loss（方法 4）
+3. **中期改进**: 改进模型架构（方法 3）
+4. **长期改进**: 收集更多训练数据，或使用 BERT 等预训练模型
+
+你可以先从最简单的方法开始，看看效果如何！
